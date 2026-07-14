@@ -1,0 +1,4 @@
+source_name,file_pattern,bronze_table,valid_table,dq_pass_table,dq_failed_table,enrich_table
+customer,customer.csv,bronze.customer,silver.customer_valid,silver.customer_valid,silver.customer_invalid,silver.customer_enriched
+products,products.csv,bronze.products,silver.products_valid,silver.products_valid,silver.products_invalid,silver.products_enriched
+orders,orders.json,bronze.orders,silver.orders_valid,silver.orders_valid,silver.orders_invalid,

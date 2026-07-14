@@ -1,0 +1,8 @@
+table_name,standard_column,data_type,date_format,nullable
+customer,customer_id,string,,False
+customer,customer_name,string,,False
+customer,email,string,,False
+orders,order_date,date,d/M/yyyy,False
+orders,ship_date,date,d/M/yyyy,False
+orders,price,double,,False
+products,price_per_product,double,,False

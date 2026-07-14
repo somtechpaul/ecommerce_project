@@ -1,0 +1,6 @@
+table_name,column_name,rule_type,rule_value,active_flag
+customer,email,NOT_NULL,,True
+customer,email,REGEX,"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$",True
+products,price_per_product,MIN_VALUE,0,True
+orders,order_id,UNIQUE,,True
+orders,quantity,MIN_VALUE,1,True

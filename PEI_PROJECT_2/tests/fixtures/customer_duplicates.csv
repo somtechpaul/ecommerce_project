@@ -1,0 +1,5 @@
+customer_id,customer_name,email,phone,address,segment,country,city,state,postal_code,region
+C001,John Smith,john@example.com,9876543210,12 MG Road,Consumer,India,Bangalore,Karnataka,560001,South
+C002,Alice Brown,alice@example.com,9123456780,45 Brigade Road,Corporate,India,Bangalore,Karnataka,560025,South
+C003,Bob Lee,bob@example.com,9988776655,78 Park Street,Home Office,India,Kolkata,West Bengal,700016,East
+C001,John Smith,john@example.com,9876543210,12 MG Road,Consumer,India,Bangalore,Karnataka,560001,South

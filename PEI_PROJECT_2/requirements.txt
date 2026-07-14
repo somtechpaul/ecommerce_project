@@ -1,0 +1,4 @@
+pytest
+pyspark
+delta-spark
+pytest-mock

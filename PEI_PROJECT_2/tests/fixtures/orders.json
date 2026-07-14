@@ -1,0 +1,41 @@
+[
+  {
+    "row_id": 1,
+    "order_id": "O001",
+    "order_date": "21/8/2016",
+    "ship_date": "23/8/2016",
+    "ship_mode": "Second Class",
+    "customer_id": "C001",
+    "product_id": "P001",
+    "quantity": "2",
+    "price": "1199.98",
+    "discount": "0.10",
+    "profit": "120.00"
+  },
+  {
+    "row_id": 2,
+    "order_id": "O002",
+    "order_date": "22/8/2016",
+    "ship_date": "25/8/2016",
+    "ship_mode": "Standard Class",
+    "customer_id": "C002",
+    "product_id": "P002",
+    "quantity": "1",
+    "price": "4999.00",
+    "discount": "0.00",
+    "profit": "700.00"
+  },
+  {
+    "row_id": 3,
+    "order_id": "O003",
+    "order_date": "23/8/2016",
+    "ship_date": "26/8/2016",
+    "ship_mode": "First Class",
+    "customer_id": "C003",
+    "product_id": "P003",
+    "quantity": "5",
+    "price": "1497.50",
+    "discount": "0.05",
+    "profit": "150.00"
+  }
+]

@@ -215,7 +215,7 @@ def build_gold_tables(
 
             col("o.ingestion_timestamp"),
 
-            col("o.load_date"),
+            col("o.ingestion_date"),
 
             # ==================================================
             # Customer
@@ -345,6 +345,21 @@ def build_gold_tables(
 
         )
 
+    )
+    print()
+
+    print("Profit Summary Built Successfully.")
+
+    print()
+
+    print("Profit Summary Schema")
+
+    profit_summary.printSchema()
+
+    print()
+
+    print(
+        f"Profit Summary Rows : {profit_summary.count()}"
     )
 
     # ======================================================

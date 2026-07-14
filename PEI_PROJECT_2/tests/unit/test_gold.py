@@ -81,7 +81,7 @@ def test_build_gold_tables(
     # Validate Gold Tables Created
     # ------------------------------------------------------
 
-    assert len(gold_tables) == 4
+    assert len(gold_tables) == 5
 
     assert "ecommerce_dev.gold.sales_master" in gold_tables
 
@@ -90,6 +90,8 @@ def test_build_gold_tables(
     assert "ecommerce_dev.gold.product_summary" in gold_tables
 
     assert "ecommerce_dev.gold.daily_sales" in gold_tables
+
+    assert "ecommerce_dev.gold.profit_summary" in gold_tables
 
 
 # ==========================================================
@@ -150,14 +152,14 @@ def test_sales_master(
     ]
 
     assert sales_master.count() > 0
-
     assert "customer_name" in sales_master.columns
-
     assert "product_name" in sales_master.columns
-
     assert "price" in sales_master.columns
-
     assert "profit" in sales_master.columns
+    assert "product_category" in sales_master.columns
+    assert "product_sub_category" in sales_master.columns
+    assert "customer_name" in sales_master.columns
+    assert "country" in sales_master.columns
 
 
 # ==========================================================
@@ -356,3 +358,61 @@ def test_daily_sales(
     assert "total_sales" in df.columns
 
     assert "total_profit" in df.columns
+
+
+
+# ==========================================================
+# Profit Summary
+# ==========================================================
+
+def test_profit_summary(
+    spark,
+    sample_configs,
+    customer_enriched_df,
+    product_enriched_df,
+    orders_valid_df,
+    monkeypatch
+):
+
+    table_lookup = {
+        "ecommerce_dev.silver.customer_enriched":
+            customer_enriched_df,
+
+        "ecommerce_dev.silver.products_enriched":
+            product_enriched_df,
+
+        "ecommerce_dev.silver.orders_valid":
+            orders_valid_df
+    }
+
+    monkeypatch.setattr(
+        spark,
+        "table",
+        lambda table: table_lookup[table]
+    )
+
+    gold_tables = build_gold_tables(
+        spark=spark,
+        configs=sample_configs
+    )
+
+    profit_summary = gold_tables[
+        "ecommerce_dev.gold.profit_summary"
+    ]
+
+    expected_columns = {
+        "order_year",
+        "product_category",
+        "product_sub_category",
+        "customer_id",
+        "customer_name",
+        "total_profit"
+    }
+
+    assert expected_columns.issubset(
+        set(profit_summary.columns)
+    )
+
+    assert profit_summary.count() > 0
+
+

@@ -115,7 +115,7 @@ def run_gold_pipeline(
             )
 
             print(
-                "Gold Table Written Successfully."
+                f"Gold Table : {table_name} : Written Successfully."
             )
 
             total_rows_written += rows_written

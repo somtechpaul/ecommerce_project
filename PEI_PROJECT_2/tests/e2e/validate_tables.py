@@ -500,6 +500,23 @@ def validate_pipeline(
 
 
 
+profit_summary = validate_table(
+    spark,
+    "ecommerce_dev.gold.profit_summary"
+)
+
+validate_columns(
+    profit_summary,
+    [
+        "order_year",
+        "product_category",
+        "product_sub_category",
+        "customer_id",
+        "customer_name",
+        "total_profit"
+    ]
+)
+
 
 
 

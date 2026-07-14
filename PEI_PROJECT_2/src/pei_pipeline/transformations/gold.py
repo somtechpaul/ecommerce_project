@@ -26,7 +26,9 @@ from pyspark.sql.functions import (
     col,
     sum,
     avg,
-    countDistinct
+    countDistinct,
+    round as spark_round,
+    year
 )
 
 def build_gold_tables(
@@ -200,7 +202,10 @@ def build_gold_tables(
 
             col("o.discount"),
 
-            col("o.profit"),
+            spark_round(
+                col("o.profit"),
+                2
+            ).alias("profit"),
 
             col("o.pipeline_run_id"),
 
@@ -238,9 +243,13 @@ def build_gold_tables(
             # Product
             # ==================================================
 
-            col("p.category"),
+            col("p.category").alias(
+                "product_category"
+            ),
 
-            col("p.sub_category"),
+            col("p.sub_category").alias(
+                "product_sub_category"
+            ),
 
             col("p.product_name"),
 
@@ -278,7 +287,77 @@ def build_gold_tables(
         f"{CATALOG}.{GOLD_SCHEMA}.sales_master"
     ] = sales_master
 
-        # ======================================================
+    # ==========================================================
+    # Profit Summary
+    # ==========================================================
+
+    profit_summary = (
+
+        sales_master
+
+        .withColumn(
+
+            "order_year",
+
+            year(col("order_date"))
+
+        )
+
+        .groupBy(
+
+            "order_year",
+
+            "product_category",
+
+            "product_sub_category",
+
+            "customer_id",
+
+            "customer_name"
+
+        )
+
+        .agg(
+
+            spark_round(
+
+                sum("profit"),
+
+                2
+
+            ).alias(
+
+                "total_profit"
+
+            )
+
+        )
+
+        .orderBy(
+
+            "order_year",
+
+            "product_category",
+
+            "product_sub_category",
+
+            "customer_name"
+
+        )
+
+    )
+
+    # ======================================================
+    # Add Profit Summary to Gold Dictionary
+    # ======================================================
+
+    gold_tables[
+        f"{CATALOG}.{GOLD_SCHEMA}.profit_summary"
+    ] = profit_summary
+
+
+
+    # ======================================================
     # Customer Sales Summary
     # ======================================================
 
@@ -355,8 +434,8 @@ def build_gold_tables(
 
             "product_id",
             "product_name",
-            "category_name",
-            "sub_category_name"
+            "product_category",
+            "product_sub_category"
 
         )
 

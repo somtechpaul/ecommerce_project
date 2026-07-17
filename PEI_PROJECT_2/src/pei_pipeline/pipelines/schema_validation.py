@@ -53,9 +53,12 @@ from pei_pipeline.quality.engine import (
     split_valid_invalid
 )
 
+
 def run_schema_validation_pipeline(
     spark,
     run_id,
+    attempt_id,
+    attempt_number,
     start_time
 ):
     """
@@ -115,6 +118,10 @@ def run_schema_validation_pipeline(
         )
 
         print("-" * 70, flush=True)
+        source_file_name = ""
+        rejected_records = 0
+        datatype_rejected_records = 0
+        required_rejected_records = 0
 
         try:
 
@@ -167,7 +174,7 @@ def run_schema_validation_pipeline(
             required_schema = get_table_schema(
                 spark,
                 source_name
-            ).cache()
+            )
 
             required_column_count = required_schema.count()
 
@@ -436,6 +443,8 @@ def run_schema_validation_pipeline(
             log_pipeline_run(
                 spark=spark,
                 run_id=run_id,
+                attempt_id=attempt_id,
+                attempt_number=attempt_number,
                 pipeline_name="PEI Pipeline",
                 pipeline_stage="Schema Validation",
                 source_name=source_name,

@@ -33,6 +33,8 @@ from pei_pipeline.audit.repository import (
 def run_enrichment_pipeline(
     spark,
     run_id,
+    attempt_id,
+    attempt_number,
     start_time
 ):
     """
@@ -58,7 +60,7 @@ def run_enrichment_pipeline(
 
         source_name = config["source_name"]
 
-        source_table = config["valid_table"]
+        source_table = config["dq_pass_table"]
 
         target_table = config["enrich_table"]
 
@@ -181,39 +183,24 @@ def run_enrichment_pipeline(
             print("Writing Pipeline Audit...")
 
             log_pipeline_run(
-
                 spark=spark,
-
                 run_id=run_id,
-
+                attempt_id=attempt_id,
+                attempt_number=attempt_number,
                 pipeline_name="PEI Pipeline",
-
                 pipeline_stage="Enrichment",
-
                 source_name=source_name,
-
                 source_file_name="",
-
                 archived_file_name="",
-
                 source_table=source_table,
-
                 target_table=target_table,
-
                 status=status,
-
                 records_read=rows_read,
-
                 records_written=rows_written,
-
                 rejected_records=0,
-
                 start_time=start_time,
-
                 end_time=datetime.now(),
-
                 error_message=error_message
-
             )
 
             print("Pipeline Audit Written.")

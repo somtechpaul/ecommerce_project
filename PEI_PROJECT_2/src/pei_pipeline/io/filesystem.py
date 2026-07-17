@@ -7,7 +7,34 @@ Reusable filesystem functions.
 """
 
 import fnmatch
+import hashlib
 
+
+def generate_source_file_id(
+    source_name: str,
+    file_path: str,
+    file_size: int,
+    modification_time: int
+) -> str:
+    """
+    Generate a deterministic ID for one physical version
+    of a source file.
+
+    The same file version always generates the same ID.
+    If the path, size, or modification time changes,
+    a new source_file_id is generated.
+    """
+
+    file_identity = "|".join([
+        source_name.strip().lower(),
+        file_path.strip(),
+        str(file_size),
+        str(modification_time)
+    ])
+
+    return hashlib.sha256(
+        file_identity.encode("utf-8")
+    ).hexdigest()
 
 def get_matching_files(
     dbutils,

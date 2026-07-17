@@ -29,6 +29,8 @@ from pei_pipeline.audit.repository import (
 def run_gold_pipeline(
     spark,
     run_id,
+    attempt_id,
+    attempt_number,
     start_time
 ):
     """
@@ -125,39 +127,24 @@ def run_gold_pipeline(
             print("Writing Pipeline Audit...")
 
             log_pipeline_run(
-
                 spark=spark,
-
                 run_id=run_id,
-
+                attempt_id=attempt_id,
+                attempt_number=attempt_number,
                 pipeline_name="PEI Pipeline",
-
                 pipeline_stage="Gold",
-
                 source_name="Multiple",
-
                 source_file_name="",
-
                 archived_file_name="",
-
                 source_table="Curated",
-
                 target_table=table_name,
-
                 status="SUCCESS",
-
                 records_read=0,
-
                 records_written=rows_written,
-
                 rejected_records=0,
-
                 start_time=start_time,
-
                 end_time=datetime.now(),
-
                 error_message=""
-
             )
 
             print("Pipeline Audit Written.")
@@ -185,39 +172,24 @@ def run_gold_pipeline(
         print("Writing Failure Audit...")
 
         log_pipeline_run(
-
             spark=spark,
-
             run_id=run_id,
-
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
             pipeline_name="PEI Pipeline",
-
             pipeline_stage="Gold",
-
             source_name="Multiple",
-
             source_file_name="",
-
             archived_file_name="",
-
             source_table="Curated",
-
             target_table="Gold",
-
             status="FAILED",
-
             records_read=0,
-
             records_written=0,
-
             rejected_records=0,
-
             start_time=start_time,
-
             end_time=datetime.now(),
-
             error_message=error_message
-
         )
 
         print("Failure Audit Written.")
@@ -237,17 +209,10 @@ def run_gold_pipeline(
     print("=" * 70)
 
     return {
-
         "stage": "gold",
-
         "run_id": run_id,
-
         "status": pipeline_status,
-
         "processed_tables": processed_tables,
-
         "failed_tables": failed_tables,
-
         "rows_written": total_rows_written
-
     }

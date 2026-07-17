@@ -42,6 +42,7 @@ DATA_QUALITY_RULE_TABLE = (
     f"{CATALOG}.{METADATA_SCHEMA}.data_quality_rules"
 )
 
+
 # ==========================================================
 # Audit Tables
 # ==========================================================
@@ -56,6 +57,10 @@ SCHEMA_VALIDATION_LOG_TABLE = (
 
 REJECTED_RECORDS_TABLE = (
     f"{CATALOG}.{AUDIT_SCHEMA}.rejected_records"
+)
+
+PROCESSED_FILES_TABLE = (
+    f"{CATALOG}.{METADATA_SCHEMA}.processed_files"
 )
 
 # ==========================================================

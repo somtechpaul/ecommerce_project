@@ -27,6 +27,7 @@ from pyspark.sql.functions import col
 def add_metadata_columns(
     df: DataFrame,
     run_id: str,
+    source_file_id: str,
     source_file: str,
     source_system: str
 ) -> DataFrame:
@@ -35,24 +36,23 @@ def add_metadata_columns(
     """
 
     return (
-
         df
-
         .withColumn(
             "pipeline_run_id",
             lit(run_id)
         )
-
+        .withColumn(
+            "source_file_id",
+            lit(source_file_id)
+        )
         .withColumn(
             "source_file_name",
             lit(source_file)
         )
-
         .withColumn(
             "source_system",
             lit(source_system)
         )
-
         .withColumn(
             "ingestion_timestamp",
             current_timestamp()
@@ -61,18 +61,18 @@ def add_metadata_columns(
             "ingestion_date",
             current_date()
         )
-
     )
 
 
 def cast_business_columns_to_string(df):
 
     metadata_columns = [
-        "pipeline_run_id",
-        "source_file_name",
-        "source_system",
-        "ingestion_timestamp",
-        "ingestion_date"
+    "pipeline_run_id",
+    "source_file_id",
+    "source_file_name",
+    "source_system",
+    "ingestion_timestamp",
+    "ingestion_date"
     ]
 
     for column in df.columns:

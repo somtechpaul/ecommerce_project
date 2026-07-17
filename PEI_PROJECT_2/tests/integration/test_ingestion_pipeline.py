@@ -88,11 +88,10 @@ def test_ingestion_pipeline(
     # ======================================================
 
     file = SimpleNamespace(
-
         name="customer.csv",
-
-        path="/landing/customer/customer.csv"
-
+        path="/landing/customer/customer.csv",
+        size=1000,
+        modificationTime=1784123400000
     )
 
     monkeypatch.setattr(
@@ -154,15 +153,11 @@ def test_ingestion_pipeline(
     # ======================================================
 
     def mock_add_metadata_columns(
-
         df,
-
         run_id,
-
+        source_file_id,
         source_file,
-
         source_system
-
     ):
 
         return (
@@ -170,53 +165,34 @@ def test_ingestion_pipeline(
             df
 
             .withColumn(
-
                 "pipeline_run_id",
-
                 lit(run_id)
-
             )
-
             .withColumn(
-
+                "source_file_id",
+                lit(source_file_id)
+            )
+            .withColumn(
                 "source_file_name",
-
                 lit(source_file)
-
             )
-
             .withColumn(
-
                 "source_system",
-
                 lit(source_system)
-
             )
-
             .withColumn(
-
                 "ingestion_timestamp",
-
                 current_timestamp()
-
             )
-
             .withColumn(
-
                 "ingestion_date",
-
                 current_date()
-
             )
-
         )
 
     monkeypatch.setattr(
-
         "pei_pipeline.pipelines.ingestion.add_metadata_columns",
-
         mock_add_metadata_columns
-
     )
 
     # ======================================================
@@ -324,15 +300,37 @@ def test_ingestion_pipeline(
     assert bronze_df.count() == 3
 
     assert "pipeline_run_id" in bronze_df.columns
-
+    assert "source_file_id" in bronze_df.columns
     assert "source_file_name" in bronze_df.columns
-
     assert "source_system" in bronze_df.columns
-
     assert "ingestion_timestamp" in bronze_df.columns
-
     assert "ingestion_date" in bronze_df.columns
 
-    assert len(archive_calls) == 1
+    # ======================================================
+    # Validate Source File ID
+    # ======================================================
 
+    source_file_ids = (
+        bronze_df
+        .select("source_file_id")
+        .distinct()
+        .collect()
+    )
+
+    # All records from the same source file must have
+    # the same source_file_id.
+    assert len(source_file_ids) == 1
+
+    # The generated source_file_id must not be NULL.
+    assert source_file_ids[0]["source_file_id"] is not None
+
+    # SHA-256 produces a 64-character hexadecimal string.
+    assert len(source_file_ids[0]["source_file_id"]) == 64
+
+
+    # ======================================================
+    # Validate Archive and Audit Calls
+    # ======================================================
+
+    assert len(archive_calls) == 1
     assert len(audit_calls) == 1

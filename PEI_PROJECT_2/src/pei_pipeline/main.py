@@ -13,14 +13,21 @@ Supported stages
 - all
 """
 
-from uuid import uuid4
 from datetime import datetime
+from uuid import uuid4
 
+
+# ==========================================================
+# Main Entry Point
+# ==========================================================
 
 def main(
     spark,
     dbutils,
-    stage
+    stage,
+    pipeline_run_id=None,
+    attempt_id=None,
+    attempt_number=1
 ):
     """
     Execute a PEI pipeline stage.
@@ -36,16 +43,73 @@ def main(
     stage
         Pipeline stage to execute.
 
+    pipeline_run_id
+        Identifier shared by all stages belonging to the
+        same Databricks Workflow run.
+
+    attempt_id
+        Identifier for the current task retry or repair.
+
+    attempt_number
+        Current task execution count, including retries
+        and repairs.
+
     Returns
     -------
     dict
         Pipeline execution summary.
     """
 
-    run_id = str(uuid4())
-    start_time = datetime.now()
+    # ======================================================
+    # Validate Stage
+    # ======================================================
+
+    if not isinstance(stage, str) or not stage.strip():
+
+        raise ValueError(
+            "stage must be a non-empty string."
+        )
 
     normalized_stage = stage.strip().lower()
+
+    # ======================================================
+    # Resolve Pipeline Run ID
+    # ======================================================
+
+    pipeline_run_id = _resolve_identifier(
+        value=pipeline_run_id,
+        fallback_prefix="interactive_run"
+    )
+
+    # ======================================================
+    # Resolve Attempt ID
+    # ======================================================
+
+    attempt_id = _resolve_identifier(
+        value=attempt_id,
+        fallback_prefix="interactive_attempt"
+    )
+
+    # ======================================================
+    # Resolve Attempt Number
+    # ======================================================
+
+    attempt_number = _resolve_attempt_number(
+        attempt_number
+    )
+
+    pipeline_start_time = datetime.now()
+
+    print()
+    print("=" * 70)
+    print("PEI PIPELINE EXECUTION CONTEXT")
+    print("=" * 70)
+    print(f"Requested Stage : {normalized_stage}")
+    print(f"Pipeline Run ID : {pipeline_run_id}")
+    print(f"Attempt ID      : {attempt_id}")
+    print(f"Attempt Number  : {attempt_number}")
+    print(f"Start Time      : {pipeline_start_time}")
+    print("=" * 70)
 
     # ======================================================
     # Ingestion
@@ -57,11 +121,25 @@ def main(
             run_ingestion_pipeline
         )
 
-        return run_ingestion_pipeline(
+        result = run_ingestion_pipeline(
             spark=spark,
             dbutils=dbutils,
-            run_id=run_id,
-            start_time=start_time
+            run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            start_time=datetime.now()
+        )
+
+        _validate_stage_result(
+            stage_name="ingestion",
+            result=result
+        )
+
+        return _add_execution_context(
+            result=result,
+            pipeline_run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number
         )
 
     # ======================================================
@@ -74,10 +152,24 @@ def main(
             run_schema_validation_pipeline
         )
 
-        return run_schema_validation_pipeline(
+        result = run_schema_validation_pipeline(
             spark=spark,
-            run_id=run_id,
-            start_time=start_time
+            run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            start_time=datetime.now()
+        )
+
+        _validate_stage_result(
+            stage_name="schema_validation",
+            result=result
+        )
+
+        return _add_execution_context(
+            result=result,
+            pipeline_run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number
         )
 
     # ======================================================
@@ -90,10 +182,24 @@ def main(
             run_data_quality_pipeline
         )
 
-        return run_data_quality_pipeline(
+        result = run_data_quality_pipeline(
             spark=spark,
-            run_id=run_id,
-            start_time=start_time
+            run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            start_time=datetime.now()
+        )
+
+        _validate_stage_result(
+            stage_name="data_quality",
+            result=result
+        )
+
+        return _add_execution_context(
+            result=result,
+            pipeline_run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number
         )
 
     # ======================================================
@@ -106,10 +212,24 @@ def main(
             run_enrichment_pipeline
         )
 
-        return run_enrichment_pipeline(
+        result = run_enrichment_pipeline(
             spark=spark,
-            run_id=run_id,
-            start_time=start_time
+            run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            start_time=datetime.now()
+        )
+
+        _validate_stage_result(
+            stage_name="enrichment",
+            result=result
+        )
+
+        return _add_execution_context(
+            result=result,
+            pipeline_run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number
         )
 
     # ======================================================
@@ -122,10 +242,24 @@ def main(
             run_gold_pipeline
         )
 
-        return run_gold_pipeline(
+        result = run_gold_pipeline(
             spark=spark,
-            run_id=run_id,
-            start_time=start_time
+            run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            start_time=datetime.now()
+        )
+
+        _validate_stage_result(
+            stage_name="gold",
+            result=result
+        )
+
+        return _add_execution_context(
+            result=result,
+            pipeline_run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number
         )
 
     # ======================================================
@@ -160,111 +294,172 @@ def main(
         print("=" * 70)
         print("PEI FULL PIPELINE STARTED")
         print("=" * 70)
-        print(f"Run ID     : {run_id}")
-        print(f"Start Time : {start_time}")
+        print(f"Pipeline Run ID : {pipeline_run_id}")
+        print(f"Attempt ID      : {attempt_id}")
+        print(f"Attempt Number  : {attempt_number}")
+        print(f"Start Time      : {pipeline_start_time}")
         print("=" * 70)
 
         # --------------------------------------------------
         # Stage 1: Ingestion
         # --------------------------------------------------
 
-        stage_results["ingestion"] = run_ingestion_pipeline(
+        ingestion_result = run_ingestion_pipeline(
             spark=spark,
             dbutils=dbutils,
-            run_id=run_id,
-            start_time=start_time
+            run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            start_time=datetime.now()
         )
 
         _validate_stage_result(
             stage_name="ingestion",
-            result=stage_results["ingestion"]
+            result=ingestion_result
+        )
+
+        stage_results["ingestion"] = (
+            _add_execution_context(
+                result=ingestion_result,
+                pipeline_run_id=pipeline_run_id,
+                attempt_id=attempt_id,
+                attempt_number=attempt_number
+            )
         )
 
         # --------------------------------------------------
         # Stage 2: Schema Validation
         # --------------------------------------------------
 
-        stage_results[
-            "schema_validation"
-        ] = run_schema_validation_pipeline(
-            spark=spark,
-            run_id=run_id,
-            start_time=start_time
+        schema_validation_result = (
+            run_schema_validation_pipeline(
+                spark=spark,
+                run_id=pipeline_run_id,
+                attempt_id=attempt_id,
+                attempt_number=attempt_number,
+                start_time=datetime.now()
+            )
         )
 
         _validate_stage_result(
             stage_name="schema_validation",
-            result=stage_results["schema_validation"]
+            result=schema_validation_result
+        )
+
+        stage_results["schema_validation"] = (
+            _add_execution_context(
+                result=schema_validation_result,
+                pipeline_run_id=pipeline_run_id,
+                attempt_id=attempt_id,
+                attempt_number=attempt_number
+            )
         )
 
         # --------------------------------------------------
         # Stage 3: Data Quality
         # --------------------------------------------------
 
-        stage_results[
-            "data_quality"
-        ] = run_data_quality_pipeline(
+        data_quality_result = run_data_quality_pipeline(
             spark=spark,
-            run_id=run_id,
-            start_time=start_time
+            run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            start_time=datetime.now()
         )
 
         _validate_stage_result(
             stage_name="data_quality",
-            result=stage_results["data_quality"]
+            result=data_quality_result
+        )
+
+        stage_results["data_quality"] = (
+            _add_execution_context(
+                result=data_quality_result,
+                pipeline_run_id=pipeline_run_id,
+                attempt_id=attempt_id,
+                attempt_number=attempt_number
+            )
         )
 
         # --------------------------------------------------
         # Stage 4: Enrichment
         # --------------------------------------------------
 
-        stage_results[
-            "enrichment"
-        ] = run_enrichment_pipeline(
+        enrichment_result = run_enrichment_pipeline(
             spark=spark,
-            run_id=run_id,
-            start_time=start_time
+            run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            start_time=datetime.now()
         )
 
         _validate_stage_result(
             stage_name="enrichment",
-            result=stage_results["enrichment"]
+            result=enrichment_result
+        )
+
+        stage_results["enrichment"] = (
+            _add_execution_context(
+                result=enrichment_result,
+                pipeline_run_id=pipeline_run_id,
+                attempt_id=attempt_id,
+                attempt_number=attempt_number
+            )
         )
 
         # --------------------------------------------------
         # Stage 5: Gold
         # --------------------------------------------------
 
-        stage_results["gold"] = run_gold_pipeline(
+        gold_result = run_gold_pipeline(
             spark=spark,
-            run_id=run_id,
-            start_time=start_time
+            run_id=pipeline_run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            start_time=datetime.now()
         )
 
         _validate_stage_result(
             stage_name="gold",
-            result=stage_results["gold"]
+            result=gold_result
         )
 
-        end_time = datetime.now()
+        stage_results["gold"] = (
+            _add_execution_context(
+                result=gold_result,
+                pipeline_run_id=pipeline_run_id,
+                attempt_id=attempt_id,
+                attempt_number=attempt_number
+            )
+        )
+
+        pipeline_end_time = datetime.now()
 
         print()
         print("=" * 70)
         print("PEI FULL PIPELINE COMPLETED")
         print("=" * 70)
-        print(f"Run ID   : {run_id}")
-        print("Status   : SUCCESS")
-        print(f"End Time : {end_time}")
+        print(f"Pipeline Run ID : {pipeline_run_id}")
+        print(f"Attempt ID      : {attempt_id}")
+        print(f"Attempt Number  : {attempt_number}")
+        print("Status          : SUCCESS")
+        print(f"End Time        : {pipeline_end_time}")
         print("=" * 70)
 
         return {
             "stage": "all",
-            "run_id": run_id,
+            "run_id": pipeline_run_id,
+            "attempt_id": attempt_id,
+            "attempt_number": attempt_number,
             "status": "SUCCESS",
             "stage_results": stage_results,
-            "start_time": start_time,
-            "end_time": end_time
+            "start_time": pipeline_start_time,
+            "end_time": pipeline_end_time
         }
+
+    # ======================================================
+    # Unsupported Stage
+    # ======================================================
 
     raise ValueError(
         f"Unsupported pipeline stage: {stage}. "
@@ -273,12 +468,20 @@ def main(
     )
 
 
+# ==========================================================
+# Validate Stage Result
+# ==========================================================
+
 def _validate_stage_result(
     stage_name,
     result
 ):
     """
-    Stop full-pipeline execution when a stage fails.
+    Stop execution when a pipeline stage does not complete
+    successfully.
+
+    FAILED and PARTIAL_SUCCESS both cause the Databricks
+    task to fail so the orchestrator can retry or repair it.
     """
 
     if result is None:
@@ -298,3 +501,86 @@ def _validate_stage_result(
             f"Pipeline stage '{stage_name}' completed with "
             f"status '{stage_status}'."
         )
+
+
+# ==========================================================
+# Add Execution Context to Result
+# ==========================================================
+
+def _add_execution_context(
+    result,
+    pipeline_run_id,
+    attempt_id,
+    attempt_number
+):
+    """
+    Add common workflow execution identifiers to a stage
+    result without modifying the original dictionary.
+    """
+
+    enriched_result = dict(result)
+
+    enriched_result["run_id"] = pipeline_run_id
+    enriched_result["attempt_id"] = attempt_id
+    enriched_result["attempt_number"] = attempt_number
+
+    return enriched_result
+
+
+# ==========================================================
+# Resolve Identifier
+# ==========================================================
+
+def _resolve_identifier(
+    value,
+    fallback_prefix
+):
+    """
+    Use a Databricks-supplied identifier when available.
+    Generate an interactive identifier otherwise.
+    """
+
+    if value is not None:
+
+        normalized_value = str(value).strip()
+
+        if normalized_value:
+            return normalized_value
+
+    return f"{fallback_prefix}_{uuid4()}"
+
+
+# ==========================================================
+# Resolve Attempt Number
+# ==========================================================
+
+def _resolve_attempt_number(
+    attempt_number
+):
+    """
+    Validate and return the current attempt number.
+    """
+
+    if attempt_number is None or str(attempt_number).strip() == "":
+
+        return 1
+
+    try:
+
+        resolved_attempt_number = int(
+            attempt_number
+        )
+
+    except (TypeError, ValueError) as exception:
+
+        raise ValueError(
+            "attempt_number must be an integer."
+        ) from exception
+
+    if resolved_attempt_number < 1:
+
+        raise ValueError(
+            "attempt_number must be greater than or equal to 1."
+        )
+
+    return resolved_attempt_number

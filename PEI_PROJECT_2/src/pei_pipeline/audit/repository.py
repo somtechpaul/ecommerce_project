@@ -34,11 +34,13 @@ from pyspark.sql.functions import (
 def log_pipeline_run(
     spark,
     run_id: str,
+    attempt_id: str,
+    attempt_number: int,
     pipeline_name: str,
     pipeline_stage: str,
     source_name: str,
     source_file_name: str,
-    archived_file_name : str,
+    archived_file_name: str,
     source_table: str,
     target_table: str,
     status: str,
@@ -57,6 +59,8 @@ def log_pipeline_run(
 
         Row(
             run_id=run_id,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
             pipeline_name=pipeline_name,
             pipeline_stage=pipeline_stage,
             source_name=source_name,

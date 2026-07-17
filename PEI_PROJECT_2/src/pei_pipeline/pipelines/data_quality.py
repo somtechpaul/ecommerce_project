@@ -57,6 +57,8 @@ from pei_pipeline.audit.repository import (
 def run_data_quality_pipeline(
     spark,
     run_id,
+    attempt_id,
+    attempt_number,
     start_time
 ):
     """
@@ -116,7 +118,7 @@ def run_data_quality_pipeline(
         source_name = config["source_name"]
 
         # Input to the DQ pipeline
-        validated_table = config["valid_table"]
+        validated_table = config["validated_table"]
 
         # Outputs from the DQ pipeline
         dq_pass_table = config["dq_pass_table"]
@@ -341,6 +343,8 @@ def run_data_quality_pipeline(
                 log_pipeline_run(
                     spark=spark,
                     run_id=run_id,
+                    attempt_id=attempt_id,
+                    attempt_number=attempt_number,
                     pipeline_name="PEI Pipeline",
                     pipeline_stage="Data Quality",
                     source_name=source_name,

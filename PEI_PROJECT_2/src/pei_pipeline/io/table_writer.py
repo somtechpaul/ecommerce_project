@@ -32,7 +32,8 @@ def write_table(
     mode: str = "append",
     merge_schema: bool = False,
     merge_keys: list[str] | None = None,
-    partition_by: list[str] | None = None
+    partition_by: list[str] | None = None,
+    replace_where: str | None = None
 ):
     """
     Generic table writer.
@@ -100,7 +101,8 @@ def _write_dataframe(
     table_name,
     mode,
     merge_schema,
-    partition_by
+    partition_by,
+    replace_where
 ):
     """
     Append / Overwrite Writer.
@@ -111,12 +113,25 @@ def _write_dataframe(
         .format("delta")
         .mode(mode)
     )
+    
 
     if merge_schema:
 
         writer = writer.option(
             "mergeSchema",
             "true"
+        )
+    
+    if replace_where:
+
+        if mode != "overwrite":
+            raise ValueError(
+                "replace_where requires overwrite mode."
+            )
+
+        writer = writer.option(
+            "replaceWhere",
+            replace_where
         )
 
     if partition_by:

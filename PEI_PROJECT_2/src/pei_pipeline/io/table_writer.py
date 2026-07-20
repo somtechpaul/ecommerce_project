@@ -92,7 +92,8 @@ def write_table(
         full_table_name,
         mode,
         merge_schema,
-        partition_by
+        partition_by,
+        replace_where
     )
 
 

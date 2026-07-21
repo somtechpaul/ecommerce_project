@@ -183,38 +183,24 @@ def build_gold_tables(
             # ==================================================
 
             col("o.row_id"),
-
             col("o.order_id"),
-
             col("o.order_date"),
-
             col("o.ship_date"),
-
             col("o.ship_mode"),
-
             col("o.customer_id"),
-
             col("o.product_id"),
-
             col("o.quantity"),
-
             col("o.price"),
-
             col("o.discount"),
-
             spark_round(
                 col("o.profit"),
                 2
             ).alias("profit"),
-
             col("o.pipeline_run_id"),
-
+            col("o.source_file_id"),
             col("o.source_system"),
-
             col("o.source_file_name"),
-
             col("o.ingestion_timestamp"),
-
             col("o.ingestion_date"),
 
             # ==================================================
@@ -222,59 +208,39 @@ def build_gold_tables(
             # ==================================================
 
             col("c.customer_name"),
-
             col("c.segment"),
-
             col("c.country"),
-
             col("c.city"),
-
             col("c.state"),
-
             col("c.postal_code"),
-
             col("c.region"),
-
             col("c.customer_full_address"),
-
             col("c.customer_region"),
-
             # ==================================================
             # Product
             # ==================================================
-
             col("p.category").alias(
                 "product_category"
             ),
-
             col("p.sub_category").alias(
                 "product_sub_category"
             ),
-
             col("p.product_name"),
-
             col("p.category_name"),
-
             col("p.sub_category_name"),
-
             col("p.price_per_product")
-
         )
-
     )
 
     print()
-
     print("Sales Master Built Successfully.")
 
     print()
-
     print("Sales Master Schema")
 
     sales_master.printSchema()
 
     print()
-
     print(
         f"Sales Master Rows : {sales_master.count()}"
     )
@@ -292,72 +258,42 @@ def build_gold_tables(
     # ==========================================================
 
     profit_summary = (
-
         sales_master
-
         .withColumn(
-
             "order_year",
-
             year(col("order_date"))
-
         )
-
         .groupBy(
-
             "order_year",
-
             "product_category",
-
             "product_sub_category",
-
             "customer_id",
-
             "customer_name"
-
         )
-
         .agg(
-
             spark_round(
-
                 sum("profit"),
-
                 2
-
             ).alias(
-
                 "total_profit"
-
             )
-
         )
-
         .orderBy(
-
             "order_year",
-
             "product_category",
-
             "product_sub_category",
-
             "customer_name"
-
         )
-
     )
     print()
-
     print("Profit Summary Built Successfully.")
 
     print()
-
     print("Profit Summary Schema")
 
     profit_summary.printSchema()
 
     print()
-
     print(
         f"Profit Summary Rows : {profit_summary.count()}"
     )
@@ -382,11 +318,8 @@ def build_gold_tables(
     print("=" * 70)
 
     customer_summary = (
-
         sales_master
-
         .groupBy(
-
             "customer_id",
             "customer_name",
             "segment",
@@ -394,41 +327,28 @@ def build_gold_tables(
             "state",
             "city",
             "customer_region"
-
         )
-
         .agg(
-
             sum("quantity").alias("total_quantity"),
-
             sum("price").alias("total_sales"),
-
             sum("profit").alias("total_profit"),
-
             avg("discount").alias("average_discount"),
-
             countDistinct("order_id").alias("total_orders")
-
         )
-
     )
 
     print("Customer Summary Built Successfully.")
-
     print()
 
     customer_summary.printSchema()
 
     print()
-
     print(
         f"Customer Summary Rows : {customer_summary.count()}"
     )
 
     gold_tables[
-
         f"{CATALOG}.{GOLD_SCHEMA}.customer_summary"
-
     ] = customer_summary
 
 
@@ -442,50 +362,34 @@ def build_gold_tables(
     print("=" * 70)
 
     product_summary = (
-
         sales_master
-
         .groupBy(
-
             "product_id",
             "product_name",
             "product_category",
             "product_sub_category"
-
         )
-
         .agg(
-
             sum("quantity").alias("total_quantity"),
-
             sum("price").alias("total_sales"),
-
             sum("profit").alias("total_profit"),
-
             avg("discount").alias("average_discount"),
-
             countDistinct("order_id").alias("total_orders")
-
         )
-
     )
 
     print("Product Summary Built Successfully.")
-
     print()
 
     product_summary.printSchema()
 
     print()
-
     print(
         f"Product Summary Rows : {product_summary.count()}"
     )
 
     gold_tables[
-
         f"{CATALOG}.{GOLD_SCHEMA}.product_summary"
-
     ] = product_summary
 
 
@@ -499,53 +403,34 @@ def build_gold_tables(
     print("=" * 70)
 
     daily_sales = (
-
         sales_master
-
         .groupBy(
-
             "order_date"
-
         )
-
         .agg(
-
             sum("quantity").alias("total_quantity"),
-
             sum("price").alias("total_sales"),
-
             sum("profit").alias("total_profit"),
-
             avg("discount").alias("average_discount"),
-
             countDistinct("order_id").alias("total_orders")
-
         )
-
         .orderBy(
-
             "order_date"
-
         )
-
     )
 
     print("Daily Sales Summary Built Successfully.")
-
     print()
 
     daily_sales.printSchema()
 
     print()
-
     print(
         f"Daily Sales Rows : {daily_sales.count()}"
     )
 
     gold_tables[
-
         f"{CATALOG}.{GOLD_SCHEMA}.daily_sales"
-
     ] = daily_sales
 
 
@@ -565,7 +450,6 @@ def build_gold_tables(
     print()
 
     for table_name in gold_tables.keys():
-
         print(
             f"Gold Table Ready : {table_name}"
         )

@@ -23,7 +23,10 @@ Workflow
 import traceback
 
 from datetime import datetime
-
+from pyspark.sql.functions import (
+    col,
+    lit
+)
 from pei_pipeline.metadata.repository import (
     get_ingestion_config,
     get_table_schema
@@ -75,6 +78,23 @@ def run_schema_validation_pipeline(
 
     config_rows = configs.collect()
 
+    required_config_columns = {
+        "source_name",
+        "bronze_table",
+        "validated_table"
+    }
+
+    missing_config_columns = sorted(
+        required_config_columns
+        - set(configs.columns)
+    )
+
+    if missing_config_columns:
+        raise ValueError(
+            "Ingestion configuration is missing required "
+            f"columns: {missing_config_columns}"
+        )
+
     print(
         f"Source Configurations Found : {len(config_rows)}",
         flush=True
@@ -82,6 +102,7 @@ def run_schema_validation_pipeline(
 
     processed_tables = 0
     failed_tables = 0
+    skipped_tables = 0
 
     total_rows_read = 0
     total_rows_written = 0
@@ -118,10 +139,14 @@ def run_schema_validation_pipeline(
         )
 
         print("-" * 70, flush=True)
-        source_file_name = ""
+ 
         rejected_records = 0
         datatype_rejected_records = 0
         required_rejected_records = 0
+
+        source_file_id = ""
+        source_file_name = ""
+        source_file_count = 0
 
         try:
 
@@ -138,13 +163,68 @@ def run_schema_validation_pipeline(
                 spark=spark,
                 table_name=bronze_table
             )
-            original_df = bronze_df
-            source_file_name = (
-                bronze_df
-                .select("source_file_name")
-                .limit(1)
-                .collect()[0]["source_file_name"]
+
+            required_lineage_columns = {
+                "pipeline_run_id",
+                "source_file_id",
+                "source_file_name"
+            }
+
+            missing_lineage_columns = sorted(
+                required_lineage_columns
+                - set(bronze_df.columns)
             )
+
+            if missing_lineage_columns:
+                raise ValueError(
+                    f"Bronze table '{bronze_table}' is missing "
+                    f"required lineage columns: "
+                    f"{missing_lineage_columns}"
+                )
+
+            bronze_df = bronze_df.filter(
+                col("pipeline_run_id") == lit(run_id)
+            )
+
+            if bronze_df.limit(1).count() == 0:
+                status = "SKIPPED"
+                skipped_tables += 1
+
+                print(
+                    f"No current-batch Bronze records found for "
+                    f"{source_name}, pipeline_run_id={run_id}",
+                    flush=True
+                )
+
+                continue
+
+            source_files = (
+                bronze_df
+                .select(
+                    "source_file_id",
+                    "source_file_name"
+                )
+                .distinct()
+                .collect()
+            )
+
+            if any(
+                row["source_file_id"] is None
+                for row in source_files
+            ):
+                raise ValueError(
+                    f"Null source_file_id found in current Bronze "
+                    f"batch for {source_name}."
+                )
+
+            source_file_count = len(source_files)
+
+            if source_file_count == 1:
+                source_file_id = source_files[0]["source_file_id"]
+                source_file_name = source_files[0]["source_file_name"]
+            else:
+                source_file_id = "MULTIPLE"
+                source_file_name = "MULTIPLE"
 
             rows_read = bronze_df.count()
 
@@ -182,7 +262,53 @@ def run_schema_validation_pipeline(
                 f"Required Columns : {required_column_count}",
                 flush=True
             )
+
+            if required_column_count == 0:
+                raise ValueError(
+                    f"No required schema metadata found for "
+                    f"source_name='{source_name}'."
+                )
             
+            required_schema_rows = required_schema.collect()
+
+            expected_columns = {
+                row["standard_column"]
+                for row in required_schema_rows
+            }
+
+            missing_columns = sorted(
+                expected_columns
+                - set(bronze_df.columns)
+            )
+
+            if missing_columns:
+
+                validation_logs = [
+                    {
+                        "run_id": run_id,
+                        "attempt_id": attempt_id,
+                        "attempt_number": attempt_number,
+                        "table_name": source_name,
+                        "source_file_id": source_file_id,
+                        "column_name": column_name,
+                        "expected_type": "Present",
+                        "actual_type": "Missing",
+                        "validation_status": "FAILED"
+                    }
+                    for column_name in missing_columns
+                ]
+
+                log_schema_validation(
+                    spark,
+                    validation_logs
+                )
+
+                raise ValueError(
+                    f"Required columns missing from "
+                    f"'{bronze_table}': {missing_columns}"
+                )
+
+
 
             # ==========================================================
             # Step 3: Safe datatype casting
@@ -262,6 +388,30 @@ def run_schema_validation_pipeline(
             required_rejected_records = (
                 required_metrics["rejected_records"]
             )
+
+            if (
+                required_invalid_df is not None
+                and required_rejected_records > 0
+            ):
+
+                print(
+                    "Logging required-column invalid records...",
+                    flush=True
+                )
+
+                log_rejected_records(
+                    invalid_df=required_invalid_df,
+                    run_id=run_id,
+                    pipeline_stage="Schema Validation",
+                    table_name=validated_table,
+                    source_name=source_name,
+                    source_file_name=source_file_name
+                )
+
+                print(
+                    "Required-column invalid records logged.",
+                    flush=True
+                )
             # =====================================================
             # Validate Schema
             # =====================================================
@@ -318,7 +468,10 @@ def run_schema_validation_pipeline(
 
                 validation_logs.append({
                     "run_id": run_id,
+                    "attempt_id": attempt_id,
+                    "attempt_number": attempt_number,
                     "table_name": source_name,
+                    "source_file_id": source_file_id,
                     "column_name": mismatch["column_name"],
                     "expected_type": mismatch["expected_type"],
                     "actual_type": mismatch["actual_type"],
@@ -338,7 +491,10 @@ def run_schema_validation_pipeline(
 
                 validation_logs.append({
                     "run_id": run_id,
+                    "attempt_id": attempt_id,
+                    "attempt_number": attempt_number,
                     "table_name": source_name,
+                    "source_file_id": source_file_id,
                     "column_name": column,
                     "expected_type": "Present",
                     "actual_type": "Missing",
@@ -378,24 +534,36 @@ def run_schema_validation_pipeline(
                 "Step 5 : Writing to Validated Table...",
                 flush=True
             )
-            load_type = config["load_type"].upper()
+            
+            # Schema Validation always writes an idempotent
+            # current-batch slice. Business load strategy is
+            # applied only after Data Quality.
 
-            # if load_type == "FULL":
-            #     mode = "overwrite"
+            escaped_run_id = run_id.replace(
+                "'",
+                "''"
+            )
 
-            # elif load_type == "INCREMENTAL":
-            #     mode = "merge"
+            valid_record_count = (
+                required_metrics["valid_records"]
+            )
 
-            # elif load_type == "CDC":
-            #     mode = "merge"
+            rejected_records = (
+                rows_read
+                - valid_record_count
+            )
 
             write_table(
                 df=valid_df,
-                table_name=validated_table
+                table_name=validated_table,
+                mode="overwrite",
+                replace_where=(
+                    "pipeline_run_id = "
+                    f"'{escaped_run_id}'"
+                )
             )
 
-            rows_written = required_metrics["valid_records"]
-            rejected_records = required_metrics["rejected_records"]
+            rows_written = valid_record_count
 
             total_rows_written += rows_written
             processed_tables += 1
@@ -448,7 +616,9 @@ def run_schema_validation_pipeline(
                 pipeline_name="PEI Pipeline",
                 pipeline_stage="Schema Validation",
                 source_name=source_name,
-                source_file_name="",
+                source_file_id=source_file_id,
+                source_file_count=source_file_count,
+                source_file_name=source_file_name,
                 archived_file_name="",
                 source_table=bronze_table,
                 target_table=validated_table,
@@ -470,11 +640,14 @@ def run_schema_validation_pipeline(
     # Pipeline Summary
     # =============================================================
 
-    final_status = (
-        "SUCCESS"
-        if failed_tables == 0
-        else "PARTIAL_SUCCESS"
-    )
+    if failed_tables == 0:
+        final_status = "SUCCESS"
+
+    elif processed_tables == 0:
+        final_status = "FAILED"
+
+    else:
+        final_status = "PARTIAL_SUCCESS"
 
     result = {
         "stage": "schema_validation",
@@ -482,6 +655,7 @@ def run_schema_validation_pipeline(
         "status": final_status,
         "processed_tables": processed_tables,
         "failed_tables": failed_tables,
+        "skipped_tables": skipped_tables,
         "rows_read": total_rows_read,
         "rows_written": total_rows_written,
         "start_time": start_time,
@@ -517,6 +691,11 @@ def run_schema_validation_pipeline(
 
     print(
         f"Rows Written      : {total_rows_written}",
+        flush=True
+    )
+
+    print(
+        f"Skipped Tables   : {skipped_tables}",
         flush=True
     )
 

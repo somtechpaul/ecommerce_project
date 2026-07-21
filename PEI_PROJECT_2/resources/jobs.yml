@@ -1,0 +1,24 @@
+resources:
+  jobs:
+    pei_data_pipeline:
+      name: pei_data_pipeline
+
+      tasks:
+        - task_key: ingestion
+          notebook_task:
+            notebook_path: ../notebooks/01_ingestion.py.py
+            base_parameters:
+              pipeline_run_id: "{{job.run_id}}"
+              attempt_id: "{{job.run_id}}_{{task.name}}_{{task.execution_count}}"
+              attempt_number: "{{task.execution_count}}"
+
+        - task_key: schema_validation
+          depends_on:
+            - task_key: ingestion
+
+          notebook_task:
+            notebook_path: ../notebooks/02_schema_validation.py.py
+            base_parameters:
+              pipeline_run_id: "{{job.run_id}}"
+              attempt_id: "{{job.run_id}}_{{task.name}}_{{task.execution_count}}"
+              attempt_number: "{{task.execution_count}}"

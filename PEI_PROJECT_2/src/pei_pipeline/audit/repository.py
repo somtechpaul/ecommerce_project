@@ -49,7 +49,9 @@ def log_pipeline_run(
     rejected_records: int,
     start_time,
     end_time,
-    error_message: str = ""
+    error_message: str = "",
+    source_file_id: str = "",
+    source_file_count: int = 0
 ):
     """
     Write pipeline execution log.
@@ -64,6 +66,8 @@ def log_pipeline_run(
             pipeline_name=pipeline_name,
             pipeline_stage=pipeline_stage,
             source_name=source_name,
+            source_file_id=source_file_id,
+            source_file_count=source_file_count,
             source_file_name=source_file_name,
             archived_file_name=archived_file_name,
             source_table=source_table,
@@ -144,81 +148,65 @@ def log_rejected_records(
         return
 
     rejected_df = (
-
         invalid_df
-
         .withColumn(
             "rejection_id",
             expr("uuid()")
         )
-
         .withColumn(
             "run_id",
             lit(run_id)
         )
-
         .withColumn(
             "pipeline_stage",
             lit(pipeline_stage)
         )
-
         .withColumn(
             "table_name",
             lit(table_name)
         )
-
         .withColumn(
             "source_name",
             lit(source_name)
         )
-
-        .withColumn(
-            "source_file_name",
-            lit(source_file_name)
-        )
-
         .withColumn(
             "raw_record",
             to_json(
                 struct(*invalid_df.columns)
             )
         )
-
         .withColumn(
             "rejected_timestamp",
             current_timestamp()
         )
-
     )
 
+    if "source_file_name" not in rejected_df.columns:
+        rejected_df = rejected_df.withColumn(
+            "source_file_name",
+            lit(source_file_name)
+        )
+
+    if "source_file_id" not in rejected_df.columns:
+        rejected_df = rejected_df.withColumn(
+            "source_file_id",
+            lit(None).cast("string")
+        )
+
     rejected_df.select(
-
         "rejection_id",
-
         "run_id",
-
         "pipeline_stage",
-
         "table_name",
-
         "source_name",
-
+        "source_file_id",
         "source_file_name",
-
         "failed_column",
-
         "expected_data_type",
-
         "actual_value",
-
         "rejection_reason",
-
         "raw_record",
-
         "rejected_timestamp"
-
     ).write.mode("append").saveAsTable(
-
         REJECTED_RECORDS_TABLE
-
     )

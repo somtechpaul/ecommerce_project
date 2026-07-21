@@ -31,6 +31,10 @@ Pipeline Audit
 import traceback
 
 from datetime import datetime
+from pyspark.sql.functions import (
+    col,
+    lit
+)
 from pei_pipeline.metadata.repository import (
     get_ingestion_config,
     get_data_quality_rules
@@ -48,10 +52,7 @@ from pei_pipeline.io.table_reader import (
     read_table
 )
 
-from pei_pipeline.audit.repository import (
-    log_pipeline_run,
-    log_rejected_records
-)
+from pei_pipeline.audit.repository import log_pipeline_run
 
 
 def run_data_quality_pipeline(
@@ -104,6 +105,7 @@ def run_data_quality_pipeline(
 
     processed_tables = 0
     failed_tables = 0
+    skipped_tables = 0
 
     total_rows_read = 0
     total_valid_written = 0
@@ -124,6 +126,22 @@ def run_data_quality_pipeline(
         dq_pass_table = config["dq_pass_table"]
         dq_failed_table = config["dq_failed_table"]
 
+        load_type = (
+            config["load_type"]
+            or ""
+        ).strip().upper()
+
+        primary_keys_value = (
+            config["primary_keys"]
+            or ""
+        )
+
+        primary_keys = [
+            key.strip()
+            for key in primary_keys_value.split(",")
+            if key.strip()
+        ]
+
         print()
         print("-" * 70)
         print(f"Source           : {source_name}")
@@ -143,6 +161,11 @@ def run_data_quality_pipeline(
         valid_records = 0
         rejected_records = 0
 
+        source_file_id = ""
+        source_file_name = ""
+        source_file_count = 0
+        table_start_time = datetime.now()
+
         try:
 
             # ==================================================
@@ -152,7 +175,7 @@ def run_data_quality_pipeline(
             if not validated_table:
 
                 raise ValueError(
-                    f"valid_table is not configured for source "
+                    f"validated_table is not configured for source "
                     f"'{source_name}'"
                 )
 
@@ -183,14 +206,82 @@ def run_data_quality_pipeline(
                 table_name=validated_table
             )
 
-            print("Table read completed.")
+            required_lineage_columns = {
+                "pipeline_run_id",
+                "source_file_id",
+                "source_file_name"
+            }
+
+            missing_lineage_columns = sorted(
+                required_lineage_columns
+                - set(validated_df.columns)
+            )
+
+            if missing_lineage_columns:
+
+                raise ValueError(
+                    f"Validated table '{validated_table}' is missing "
+                    f"required lineage columns: "
+                    f"{missing_lineage_columns}"
+                )
+
+
+            validated_df = validated_df.filter(
+                col("pipeline_run_id") == lit(run_id)
+            )
+
+
+            if validated_df.limit(1).count() == 0:
+
+                status = "SKIPPED"
+                skipped_tables += 1
+
+                print(
+                    f"No current-batch validated records found for "
+                    f"{source_name}, pipeline_run_id={run_id}"
+                )
+
+                continue
+
+
+            source_files = (
+                validated_df
+                .select(
+                    "source_file_id",
+                    "source_file_name"
+                )
+                .distinct()
+                .collect()
+            )
+
+            source_file_count = len(source_files)
+
+            if source_file_count == 1:
+
+                source_file_id = source_files[0]["source_file_id"]
+                source_file_name = source_files[0]["source_file_name"]
+
+            else:
+
+                source_file_id = "MULTIPLE"
+                source_file_name = "MULTIPLE"
+            
+            if any(
+                row["source_file_id"] is None
+                for row in source_files
+            ):
+
+                raise ValueError(
+                    f"Null source_file_id found in the current "
+                    f"validated batch for '{source_name}'."
+                )
+
 
             rows_read = validated_df.count()
 
             total_rows_read += rows_read
 
             print(f"Rows Read : {rows_read}")
-
             print("Validated Schema :")
 
             validated_df.printSchema()
@@ -210,6 +301,13 @@ def run_data_quality_pipeline(
             rules_count = rules_df.count()
 
             print(f"Rules Found : {rules_count}")
+
+            if rules_count == 0:
+
+                raise ValueError(
+                    f"No active Data Quality rules are configured "
+                    f"for source '{source_name}'."
+                )
 
             # During development, uncomment this to inspect rules.
             #
@@ -252,11 +350,58 @@ def run_data_quality_pipeline(
             print(f"Target Table : {dq_pass_table}")
             print(f"Rows to Write : {valid_records}")
 
-            write_table(
-                df=valid_df,
-                table_name=dq_pass_table,
-                mode="overwrite"
-            )
+            if load_type == "FULL":
+
+                write_table(
+                    df=valid_df,
+                    table_name=dq_pass_table,
+                    mode="overwrite"
+                )
+
+            elif load_type == "INCREMENTAL":
+
+                if not primary_keys:
+
+                    raise ValueError(
+                        f"primary_keys must be configured for "
+                        f"incremental source '{source_name}'."
+                    )
+
+                missing_primary_keys = [
+                    key
+                    for key in primary_keys
+                    if key not in valid_df.columns
+                ]
+
+                if missing_primary_keys:
+
+                    raise ValueError(
+                        f"Primary keys are missing from the "
+                        f"DQ-passed DataFrame: "
+                        f"{missing_primary_keys}"
+                    )
+
+                write_table(
+                    df=valid_df,
+                    table_name=dq_pass_table,
+                    mode="merge",
+                    merge_keys=primary_keys
+                )
+
+            elif load_type == "CDC":
+
+                raise NotImplementedError(
+                    f"CDC is configured for '{source_name}', "
+                    "but CDC insert, update and delete handling "
+                    "has not been implemented."
+                )
+
+            else:
+
+                raise ValueError(
+                    f"Unsupported load_type '{load_type}' "
+                    f"for source '{source_name}'."
+                )
 
             print(
                 f"DQ Passed Records Written Successfully "
@@ -269,24 +414,36 @@ def run_data_quality_pipeline(
 
             print()
 
-            if (
-                rejected_df is not None
-                and rejected_records > 0
-            ):
-
+            if rejected_df is not None and rejected_records > 0:
+                print()
                 print("Step 6 : Writing DQ Failed Records...")
                 print(f"Target Table : {dq_failed_table}")
                 print(f"Rows to Write : {rejected_records}")
 
+                failed_output_df = (
+                    rejected_df
+                    if rejected_df is not None
+                    else validated_df.limit(0)
+                )
+
+                escaped_run_id = run_id.replace(
+                    "'",
+                    "''"
+                )
+
                 write_table(
-                    df=rejected_df,
+                    df=failed_output_df,
                     table_name=dq_failed_table,
-                    mode="overwrite"
+                    mode="overwrite",
+                    replace_where=(
+                        "pipeline_run_id = "
+                        f"'{escaped_run_id}'"
+                    )
                 )
 
                 print(
-                    f"DQ Failed Records Written Successfully "
-                    f"to {dq_failed_table}"
+                    f"DQ Failed current-run slice written "
+                    f"successfully to {dq_failed_table}"
                 )
 
             else:
@@ -309,18 +466,11 @@ def run_data_quality_pipeline(
             )
 
         except Exception as ex:
-
             status = "FAILED"
-
             failed_tables += 1
-
-            error_message = str(ex)
-
+            error_message = traceback.format_exc()
             print()
-            print(
-                f"Data Quality Failed : {source_name}"
-            )
-
+            print(f"Data Quality Failed : {source_name}")
             print(f"Error Message : {error_message}")
 
             print()
@@ -348,7 +498,9 @@ def run_data_quality_pipeline(
                     pipeline_name="PEI Pipeline",
                     pipeline_stage="Data Quality",
                     source_name=source_name,
-                    source_file_name="",
+                    source_file_id=source_file_id,
+                    source_file_count=source_file_count,
+                    source_file_name=source_file_name,
                     archived_file_name="",
                     source_table=validated_table,
                     target_table=(
@@ -359,7 +511,7 @@ def run_data_quality_pipeline(
                     records_read=rows_read,
                     records_written=valid_records,
                     rejected_records=rejected_records,
-                    start_time=start_time,
+                    start_time=table_start_time,
                     end_time=datetime.now(),
                     error_message=error_message
                 )
@@ -368,30 +520,26 @@ def run_data_quality_pipeline(
 
             except Exception as audit_exception:
 
-                print(
-                    "Pipeline Audit Logging Failed."
-                )
-
-                print(
-                    f"Audit Error : {audit_exception}"
-                )
+                print("Pipeline Audit Logging Failed.")
+                print(f"Audit Error : {audit_exception}")
 
                 traceback.print_exc()
+                raise RuntimeError(
+                    f"Data Quality audit logging failed for "
+                    f"source '{source_name}'."
+                ) from audit_exception
 
     # ==========================================================
     # Final pipeline status
     # ==========================================================
 
     if failed_tables == 0:
-
         pipeline_status = "SUCCESS"
 
     elif processed_tables == 0:
-
         pipeline_status = "FAILED"
 
     else:
-
         pipeline_status = "PARTIAL_SUCCESS"
 
     # ==========================================================
@@ -416,6 +564,7 @@ def run_data_quality_pipeline(
         "status": pipeline_status,
         "processed_tables": processed_tables,
         "failed_tables": failed_tables,
+        "skipped_tables": skipped_tables,
         "rows_read": total_rows_read,
         "valid_rows_written": total_valid_written,
         "rejected_rows_written": total_invalid_written

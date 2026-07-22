@@ -372,6 +372,8 @@ def run_ingestion_pipeline(
                         ]
                     )
 
+                    # Delta Lake enforces a strict safety check on replaceWhere. If your incoming DataFrame contains even one row where #source_file_id does not equal source_file_id_val, the entire transaction will fail with an AnalysisException. Every single row # in your source DataFrame must match your replaceWhere predicate
+
                     rows_written = rows_read
 
                     # =============================================
